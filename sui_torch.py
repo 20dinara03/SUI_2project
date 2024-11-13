@@ -22,9 +22,6 @@ class Tensor:
             # Check if the deltas shape matches the current tensor shape
             assert deltas.shape == self.value.shape, f'Expected gradient with shape {self.value.shape}, got {deltas.shape}'
             self.grad = deltas  # Add the incoming gradient to the current gradient
-            # Recursively call the backpropagation operation to propagate the error back
-            if self.back_op:
-                self.back_op(self.grad)
         else:
             if self.shape != tuple() and np.prod(self.shape) != 1:
                 raise ValueError(f'Can only backpropagate a scalar, got shape {self.shape}')
@@ -33,10 +30,11 @@ class Tensor:
                 raise ValueError(f'Cannot start backpropagation from a leaf!')
             
             self.grad = 1.0
-            # Recursively call the backpropagation operation of the previous step
-            if self.back_op:
-                self.back_op(self.grad)
 
+        # Recursively call the backpropagation operation to propagate the error back
+        # Recursively call the backpropagation operation of the previous step
+        if self.back_op is not None:
+            self.back_op(self.grad)
 
 
 def sui_sum(tensor):
@@ -52,8 +50,9 @@ def sui_sum(tensor):
     """
     result = np.sum(tensor.value)
 
-    def back_op(grad_output):
-        tensor.grad = np.ones_like(tensor.value) * grad_output  # Every element contributes equally
+    def back_op(_):
+        tensor.grad = np.ones_like(tensor.value)    # Every element contributes equally
+        tensor.backward(tensor.grad)
 
     return Tensor(result, back_op)
 
@@ -73,6 +72,8 @@ def add(tensor_A, tensor_B):
     def back_op(grad_output):
         tensor_A.grad += grad_output  # Gradient with respect to A
         tensor_B.grad += grad_output  # Gradient with respect to B
+        tensor_A.backward(tensor_A.grad)
+        tensor_B.backward(tensor_B.grad)
 
     return Tensor(result, back_op)
 
@@ -91,9 +92,11 @@ def subtract(tensor_A, tensor_B):
 
     def back_op(grad_output):
         # Gradient with respect to A is the same as the grad_output.
-        tensor_A.grad+= grad_output
+        tensor_A.grad += grad_output
         # Gradient with respect to B is the negative of grad_output.
-        tensor_B.grad+= -grad_output
+        tensor_B.grad -= grad_output
+        tensor_A.backward(tensor_A.grad)
+        tensor_B.backward(tensor_B.grad)
 
     return Tensor(result, back_op)
 
@@ -116,6 +119,8 @@ def multiply(tensor_A, tensor_B):
         tensor_A.grad+= tensor_B.value * grad_output
         # Gradient with respect to B is A element-wise multiplied by grad_output.
         tensor_B.grad+= tensor_A.value * grad_output
+        tensor_A.backward(tensor_A.grad)
+        tensor_B.backward(tensor_B.grad)
 
     return Tensor(result, back_op)
 
@@ -135,7 +140,8 @@ def relu(tensor):
 
     def back_op(grad_output):
         # Gradient is 1 where tensor value is positive, otherwise 0.
-        tensor.grad+= grad_output * (tensor.value > 0)
+        tensor.grad += grad_output * (tensor.value > 0)
+        tensor.backward(tensor.grad)
 
     return Tensor(result, back_op)
 
@@ -155,8 +161,10 @@ def dot_product(tensor_A, tensor_B):
 
     def back_op(grad_output):
         # Gradient with respect to A is the transpose of B multiplied by grad_output.
-        tensor_A.grad+= np.dot(grad_output, tensor_B.value.T)
+        tensor_A.grad += np.dot(grad_output, tensor_B.value.T)
         # Gradient with respect to B is the transpose of A multiplied by grad_output.
-        tensor_B.grad+= np.dot(tensor_A.value.T, grad_output)
+        tensor_B.grad += np.dot(tensor_A.value.T, grad_output)
+        tensor_A.backward(tensor_A.grad)
+        tensor_B.backward(tensor_B.grad)
 
     return Tensor(result, back_op)
