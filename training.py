@@ -163,7 +163,7 @@ def main():
         plot_model(m3, 'NonLinear 20')
         plot_model(m4, 'NonLinear 50')
         plt.legend()
-        plt.show()
+        plt.savefig('plot.png')
 
 
 if __name__ == '__main__':
